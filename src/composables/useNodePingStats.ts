@@ -17,7 +17,7 @@ export interface NodePingStatsState {
   hasData: boolean
 }
 
-interface PingRecord {
+export interface PingRecord {
   client: string
   task_id: number
   time: string
@@ -36,7 +36,7 @@ interface SharedPingRecordsResponse {
   tasks?: PingTaskInfo[]
 }
 
-interface SharedPingRecordsState {
+export interface SharedPingRecordsState {
   recordsByClient: Map<string, PingRecord[]>
   tasks: PingTaskInfo[]
 }
@@ -798,5 +798,79 @@ export function useNodeCarrierPingStats(
     carriers,
     loading,
     error,
+  }
+}
+
+/**
+ * 复用全局共享的 Ping 历史缓存（避免重复发起 RPC 请求），供大陆连通性检测等模块读取任务与原始记录。
+ */
+export function useSharedPingRecordsSnapshot(
+  options?: {
+    hours?: MaybeRefOrGetter<number>
+    enabled?: MaybeRefOrGetter<boolean>
+  },
+) {
+  const resolved = computed(() => ({
+    hours: Math.max(1, Math.floor(toValue(options?.hours) ?? 1)),
+    enabled: toValue(options?.enabled) ?? true,
+  }))
+
+  let activeHours: number | null = null
+  let releaseSharedRecords: (() => void) | null = null
+
+  function syncSubscription(hours: number | null): void {
+    if (activeHours === hours)
+      return
+
+    releaseSharedRecords?.()
+    releaseSharedRecords = null
+    activeHours = null
+
+    if (hours === null)
+      return
+
+    releaseSharedRecords = retainSharedPingRecordsEntry(hours)
+    activeHours = hours
+  }
+
+  onScopeDispose(() => {
+    syncSubscription(null)
+  })
+
+  const snapshot = computed<SharedPingRecordsState | null>(() => {
+    const { hours, enabled } = resolved.value
+    if (!enabled)
+      return null
+    return getSharedPingRecordsEntry(hours).data.value ?? null
+  })
+
+  watch(
+    resolved,
+    async (next) => {
+      const { hours, enabled } = next
+      if (!enabled) {
+        syncSubscription(null)
+        return
+      }
+
+      syncSubscription(hours)
+      const entry = getSharedPingRecordsEntry(hours)
+      const shouldLoad = !entry.data.value
+        || Date.now() - entry.lastFetchedAt >= PING_RECORD_REFRESH_INTERVAL_MS
+
+      if (!shouldLoad)
+        return
+
+      try {
+        await loadSharedPingRecords(entry, hours)
+      }
+      catch {
+      }
+    },
+    { immediate: true },
+  )
+
+  return {
+    snapshot,
   }
 }

@@ -2,6 +2,7 @@
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed } from 'vue'
+import NodeMainlandBadge from '@/components/NodeMainlandBadge.vue'
 import { Badge } from '@/components/ui/badge'
 import { CardX } from '@/components/ui/card-x'
 import { DataTooltip } from '@/components/ui/data-tooltip'
@@ -60,6 +61,15 @@ const memPercentage = computed(() => getMemoryPercentage(props.node))
 const memStatus = computed(() => getStatus(memPercentage.value))
 const diskPercentage = computed(() => getDiskPercentage(props.node))
 const diskStatus = computed(() => getStatus(diskPercentage.value))
+const gpuName = computed(() => {
+  const raw = props.node.gpu_name?.trim()
+  if (!raw || raw.toLowerCase() === 'none')
+    return ''
+  return raw
+})
+const hasGpu = computed(() => Boolean(gpuName.value))
+const gpuPercentage = computed(() => Math.min(100, Math.max(0, props.node.gpu ?? 0)))
+const gpuStatus = computed(() => getStatus(gpuPercentage.value))
 
 const {
   carrierDisplays,
@@ -195,7 +205,7 @@ function hasRegion(region: string | null | undefined): boolean {
 
     <template #default>
       <div class="flex flex-col relative" :class="nodeCardContentClass">
-        <!-- 在线天数固定展示，价格独立展示，避免不同主机卡片高度不一致 -->
+        <!-- 在线天数固定展示，价格与大陆连通性独立展示，避免不同主机卡片高度不一致 -->
         <div class="relative z-20 flex items-center gap-1.5 -mt-1 h-[19px] overflow-hidden">
           <span class="shrink-0 text-[11px] px-2 py-0.5 rounded-full bg-slate-500/10 text-muted-foreground leading-tight">
             {{ uptimeDaysText }}
@@ -206,6 +216,7 @@ function hasRegion(region: string | null | undefined): boolean {
           >
             {{ priceText }}
           </span>
+          <NodeMainlandBadge :uuid="props.node.uuid" :name="props.node.name" />
         </div>
 
         <!-- 四项进度条 -->
@@ -308,6 +319,18 @@ function hasRegion(region: string | null | undefined): boolean {
               </template>
             </div>
           </div>
+        </div>
+
+        <!-- GPU 实时占用（仅对具备 GPU 的节点展示） -->
+        <div v-if="hasGpu" class="flex flex-col gap-1 rounded-lg bg-slate-500/5 px-2 py-1.5">
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <span class="flex min-w-0 items-center gap-1 text-muted-foreground">
+              <Icon icon="icon-park-outline:video-one" width="12" height="12" class="shrink-0" />
+              <span class="truncate text-[11px]">GPU · {{ gpuName }}</span>
+            </span>
+            <span class="shrink-0 tabular-nums font-medium">{{ gpuPercentage.toFixed(1) }}%</span>
+          </div>
+          <ProgressThin :percentage="gpuPercentage" :status="gpuStatus" :height="4" />
         </div>
 
         <!-- 三列：网速 / 总流量 / 剩余天数+价格或负载 -->

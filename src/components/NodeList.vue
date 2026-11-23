@@ -3,6 +3,7 @@ import type { CSSProperties } from 'vue'
 import type { NodeData } from '@/stores/nodes'
 import { Icon } from '@iconify/vue'
 import { computed, ref, watch } from 'vue'
+import NodeMainlandBadge from '@/components/NodeMainlandBadge.vue'
 import NodePingListCell from '@/components/NodePingListCell.vue'
 import TrafficProgress from '@/components/TrafficProgress.vue'
 import { Badge } from '@/components/ui/badge'
@@ -385,6 +386,7 @@ function buildNodeMetadataItems(node: NodeData): NodeMetadataItem[] {
                     :alt="getRegionAltText(node.region)" class="size-5 rounded-sm shrink-0"
                   >
                   <span class="truncate">{{ node.name }}</span>
+                  <NodeMainlandBadge :uuid="node.uuid" :name="node.name" compact />
                 </div>
                 <div
                   v-if="showPrice && getPriceTags(node).length > 0"

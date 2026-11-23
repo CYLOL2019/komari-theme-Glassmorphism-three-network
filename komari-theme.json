@@ -1,10 +1,10 @@
 {
   "name": "Komari Glassmorphism",
   "short": "Glassmorphism",
-  "description": "A Glassmorphism theme for Komari with China Unicom, China Telecom and China Mobile latency/loss panels",
-  "version": "2.4.0",
-  "author": "sanrokamlan",
-  "url": "https://github.com/sanrokamlan-prog/komari-theme-Glassmorphism",
+  "description": "A Glassmorphism theme for Komari with China three-network latency/loss panels, Mainland China reachability (GFW/TCP) indicator, and GPU card metrics",
+  "version": "2.5.0",
+  "author": "sanrokamlan & contributors",
+  "url": "https://github.com/CYLOL2019/komari-theme-Glassmorphism-three-network",
   "preview": "preview-v2.0.0.png",
   "configuration": {
     "type": "managed",
@@ -246,6 +246,31 @@
         "type": "number",
         "default": 30,
         "help": "节点剩余天数小于等于该值时归为即将到期（1-3650）"
+      },
+      {
+        "name": "中国大陆连通性检测（GFW / 封锁状态）",
+        "type": "title"
+      },
+      {
+        "key": "mainlandBlockCheckEnabled",
+        "name": "启用大陆封锁检测徽标",
+        "type": "switch",
+        "default": true,
+        "help": "开启后在节点卡片与列表中显示中国大陆直连/TCP阻断/疑似被墙状态。支持 Komari 原生 Ping 任务命名匹配（如 大陆TCP:节点名 / 大陆ICMP:节点名）或外部探针 JSON。"
+      },
+      {
+        "key": "mainlandBlockProbeUrl",
+        "name": "外部探针 JSON 地址（可选）",
+        "type": "string",
+        "default": "",
+        "help": "可选。填写同源或支持 CORS 的探针 JSON URL（如 /mainland-status.json），用于由中国大陆主机直连探测各节点 TCP/ICMP 连通性。留空时仅使用 Komari 原生 Ping 任务匹配。"
+      },
+      {
+        "key": "mainlandBlockRefreshSeconds",
+        "name": "外部探针刷新间隔（秒）",
+        "type": "number",
+        "default": 60,
+        "help": "外部探针 JSON 自动轮询间隔，单位：秒（15-3600）"
       },
       {
         "name": "自定义背景",
