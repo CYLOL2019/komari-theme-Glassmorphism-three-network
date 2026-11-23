@@ -1,4 +1,4 @@
-import type { Client, NodeStatus } from '@/utils/rpc'
+import type { Client, NodeStatus, NodeStatusGpuDetail } from '@/utils/rpc'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
@@ -47,6 +47,7 @@ export interface NodeData {
   time: string
   cpu: number
   gpu: number
+  gpu_detailed_info?: NodeStatusGpuDetail[]
   ram: number
   swap: number
   load: number
@@ -73,6 +74,7 @@ interface StatusData {
   time: string
   cpu: number
   gpu: number
+  gpu_detailed_info?: NodeStatusGpuDetail[]
   ram: number
   swap: number
   load: number
@@ -221,6 +223,18 @@ const useNodesStore = defineStore('nodes', () => {
       node.cpu = status.cpu
     if (node.gpu !== status.gpu)
       node.gpu = status.gpu
+    if (status.gpu_detailed_info) {
+      const prev = node.gpu_detailed_info
+      const next = status.gpu_detailed_info
+      const changed = !prev
+        || prev.length !== next.length
+        || next.some((g, idx) => {
+          const p = prev[idx]
+          return !p || p.name !== g.name || p.utilization !== g.utilization || p.memory_used !== g.memory_used || p.memory_total !== g.memory_total || p.temperature !== g.temperature
+        })
+      if (changed)
+        node.gpu_detailed_info = next
+    }
     if (node.ram !== status.ram)
       node.ram = status.ram
     if (node.swap !== status.swap)

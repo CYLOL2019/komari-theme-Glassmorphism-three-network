@@ -131,12 +131,22 @@ export interface NodeStatusPing {
   max: number
 }
 
+export interface NodeStatusGpuDetail {
+  name: string
+  memory_total: number
+  memory_used: number
+  utilization: number
+  temperature: number
+}
+
 /** 节点状态 */
 export interface NodeStatus {
   client: string
   time: string
   cpu: number
   gpu: number
+  gpu_count?: number
+  gpu_detailed_info?: NodeStatusGpuDetail[]
   ram: number
   ram_total: number
   swap: number

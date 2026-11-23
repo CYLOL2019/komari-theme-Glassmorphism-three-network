@@ -61,15 +61,32 @@ const memPercentage = computed(() => getMemoryPercentage(props.node))
 const memStatus = computed(() => getStatus(memPercentage.value))
 const diskPercentage = computed(() => getDiskPercentage(props.node))
 const diskStatus = computed(() => getStatus(diskPercentage.value))
+const primaryGpu = computed(() => props.node.gpu_detailed_info?.[0] ?? null)
 const gpuName = computed(() => {
+  const detailName = primaryGpu.value?.name?.trim()
+  if (detailName && detailName.toLowerCase() !== 'none')
+    return detailName
   const raw = props.node.gpu_name?.trim()
   if (!raw || raw.toLowerCase() === 'none')
     return ''
   return raw
 })
 const hasGpu = computed(() => Boolean(gpuName.value))
-const gpuPercentage = computed(() => Math.min(100, Math.max(0, props.node.gpu ?? 0)))
+const gpuPercentage = computed(() => {
+  const val = primaryGpu.value?.utilization ?? props.node.gpu ?? 0
+  return Math.min(100, Math.max(0, val))
+})
 const gpuStatus = computed(() => getStatus(gpuPercentage.value))
+const gpuVramText = computed(() => {
+  const g = primaryGpu.value
+  if (!g || !g.memory_total)
+    return ''
+  return `${formatBytes(g.memory_used)} / ${formatBytes(g.memory_total)}`
+})
+const gpuTempText = computed(() => {
+  const t = primaryGpu.value?.temperature
+  return typeof t === 'number' && t > 0 ? `${Math.round(t)}°C` : ''
+})
 
 const {
   carrierDisplays,
@@ -326,11 +343,15 @@ function hasRegion(region: string | null | undefined): boolean {
           <div class="flex items-center justify-between gap-2 text-xs">
             <span class="flex min-w-0 items-center gap-1 text-muted-foreground">
               <Icon icon="icon-park-outline:video-one" width="12" height="12" class="shrink-0" />
-              <span class="truncate text-[11px]">GPU · {{ gpuName }}</span>
+              <span class="truncate text-[11px]">{{ gpuName }}</span>
             </span>
             <span class="shrink-0 tabular-nums font-medium">{{ gpuPercentage.toFixed(1) }}%</span>
           </div>
           <ProgressThin :percentage="gpuPercentage" :status="gpuStatus" :height="4" />
+          <div v-if="gpuVramText || gpuTempText" class="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+            <span class="truncate tabular-nums">{{ gpuVramText }}</span>
+            <span v-if="gpuTempText" class="shrink-0 tabular-nums">{{ gpuTempText }}</span>
+          </div>
         </div>
 
         <!-- 三列：网速 / 总流量 / 剩余天数+价格或负载 -->
