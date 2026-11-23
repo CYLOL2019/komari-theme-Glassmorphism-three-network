@@ -1,0 +1,111 @@
+# Example declarative Komari configuration (YAML or JSON both supported)
+# All IPs/domains below are RFC 5737 / RFC 2606 documentation placeholders.
+version: 1
+
+site:
+  sitename: My Server Monitor
+  description: Multi-cloud & GPU cluster status
+  geo_ip_enabled: true
+  expire_notification_enabled: true
+  expire_notification_lead_days: 7
+
+theme:
+  active: Glassmorphism
+  settings:
+    themeMode: beijing
+    defaultViewMode: card
+    nodeCardSize: compact
+    rpcTransportMode: http
+    mainlandBlockCheckEnabled: true
+    mainlandBlockProbeUrl: /mainland-status.json
+    mainlandBlockRefreshSeconds: 60
+
+nodes:
+  - name: Local-GPU-Server
+    region: 🇨🇳
+    group: HomeLab
+    tags: RTX4090;GPU
+    weight: 0
+    price: 0
+    billing_cycle: 0
+    auto_renewal: false
+    currency: $
+    expired_at: null
+    traffic_limit: 0
+    traffic_limit_type: max
+    remark: ""
+    public_remark: Local GPU Workstation (1T NVMe + 4T HDD)
+    hidden: false
+
+  - name: US-East-VPS-1
+    region: 🇺🇸
+    group: Cloud A
+    tags: VPS
+    weight: 1
+    price: 6.99
+    billing_cycle: 30
+    auto_renewal: true
+    currency: $
+    expired_at: "2027-01-01T00:00:00Z"
+    traffic_limit: 2 TiB
+    traffic_limit_type: sum
+    remark: ""
+    public_remark: US East $6.99/mo (2TB)
+    hidden: false
+
+  - name: US-East-VPS-2
+    region: 🇺🇸
+    group: Cloud B
+    tags: VPS
+    weight: 2
+    price: 20
+    billing_cycle: 30
+    auto_renewal: true
+    currency: $
+    expired_at: "2027-01-01T00:00:00Z"
+    traffic_limit: 200 GiB
+    traffic_limit_type: up
+    remark: ""
+    public_remark: US East Standard (200GB Free Egress)
+    hidden: false
+
+# Ping tasks reference nodes by NAME (not UUID), so migrating to a brand-new
+# Komari server automatically binds tasks to newly generated node UUIDs.
+ping_tasks:
+  - name: 中国电信
+    type: icmp
+    target: 202.96.209.133
+    interval: 30
+    default_on: true
+    clients:
+      - US-East-VPS-1
+      - US-East-VPS-2
+
+  - name: 中国联通
+    type: icmp
+    target: 210.22.97.1
+    interval: 30
+    default_on: true
+    clients:
+      - US-East-VPS-1
+      - US-East-VPS-2
+
+  - name: 中国移动
+    type: icmp
+    target: 211.136.112.200
+    interval: 30
+    default_on: true
+    clients:
+      - US-East-VPS-1
+      - US-East-VPS-2
+
+# Optional companion section for scripts/mainland-probe/probe.py
+# Render JSON env var with: python3 komari_sync.py render-probe -f example-config.yml
+mainland_probe:
+  targets:
+    - name: US-East-VPS-1
+      ip: 203.0.113.10
+      port: 443
+    - name: US-East-VPS-2
+      ip: 198.51.100.20
+      port: 443
