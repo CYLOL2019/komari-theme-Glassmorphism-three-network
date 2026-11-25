@@ -9,6 +9,7 @@ import { DataTooltip } from '@/components/ui/data-tooltip'
 import { ProgressThin } from '@/components/ui/progress-thin'
 import { useNodeCarrierPingDisplay } from '@/composables/useNodeCarrierPingDisplay'
 import { useAppStore } from '@/stores/app'
+import { getAggregateGpuMetrics, getGpuDisplayName, hasLiveGpuTelemetry } from '@/utils/gpuHelper'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatDateTime, getStatus, getUptimeDays } from '@/utils/helper'
 import { getDiskPercentage, getMemoryPercentage, getTrafficUsed, getTrafficUsedPercentage, hasTrafficLimit } from '@/utils/nodeMetricsHelper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
@@ -61,36 +62,26 @@ const memPercentage = computed(() => getMemoryPercentage(props.node))
 const memStatus = computed(() => getStatus(memPercentage.value))
 const diskPercentage = computed(() => getDiskPercentage(props.node))
 const diskStatus = computed(() => getStatus(diskPercentage.value))
-const primaryGpu = computed(() => props.node.gpu_detailed_info?.[0] ?? null)
-const gpuName = computed(() => {
-  const detailName = primaryGpu.value?.name?.trim()
-  if (detailName && detailName.toLowerCase() !== 'none')
-    return detailName
-  const raw = props.node.gpu_name?.trim()
-  if (!raw || raw.toLowerCase() === 'none')
-    return ''
-  return raw
-})
-const hasGpu = computed(() => Boolean(gpuName.value))
-const gpuPercentage = computed(() => {
-  const val = primaryGpu.value?.utilization ?? props.node.gpu ?? 0
-  return Math.min(100, Math.max(0, val))
-})
+const gpuName = computed(() => getGpuDisplayName(props.node))
+const gpuMetrics = computed(() => getAggregateGpuMetrics(props.node))
+const hasGpu = computed(() => hasLiveGpuTelemetry(props.node))
+const gpuPercentage = computed(() => gpuMetrics.value.utilization)
 const gpuStatus = computed(() => getStatus(gpuPercentage.value))
 const gpuVramText = computed(() => {
-  const g = primaryGpu.value
-  if (!g || !g.memory_total)
+  const { memoryUsed, memoryTotal } = gpuMetrics.value
+  if (!memoryTotal)
     return ''
-  return `${formatBytes(g.memory_used)} / ${formatBytes(g.memory_total)}`
+  return `${formatBytes(memoryUsed)} / ${formatBytes(memoryTotal)}`
 })
 const gpuTempText = computed(() => {
-  const t = primaryGpu.value?.temperature
+  const t = gpuMetrics.value.temperature
   return typeof t === 'number' && t > 0 ? `${Math.round(t)}°C` : ''
 })
 
 const {
   carrierDisplays,
 } = useNodeCarrierPingDisplay(() => props.node.uuid)
+const hasCarrierPingTasks = computed(() => carrierDisplays.value.some(c => c.taskNames.length > 0))
 
 const trafficUsedPercentage = computed(() => getTrafficUsedPercentage(props.node))
 const trafficUsed = computed(() => getTrafficUsed(props.node))
@@ -407,8 +398,8 @@ function hasRegion(region: string | null | undefined): boolean {
           </div>
         </div>
 
-        <!-- 联通 / 电信 / 移动三网延迟 + 丢包 -->
-        <div class="grid grid-cols-2 gap-1.5">
+        <!-- 联通 / 电信 / 移动三网延迟 + 丢包（仅对配置了三网 Ping 任务的节点展示） -->
+        <div v-if="hasCarrierPingTasks" class="grid grid-cols-2 gap-1.5">
           <div
             class="group/panel relative flex flex-col rounded-lg bg-slate-500/5"
             :class="[nodeCardCarrierPingPanelClass, !props.node.online ? 'blur-xs opacity-50' : '']"

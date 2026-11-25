@@ -17,6 +17,7 @@ import { useNodesStore } from '@/stores/nodes'
 import { getSharedApi } from '@/utils/api'
 import { formatCityNameZh } from '@/utils/cityNameHelper'
 import * as financeHelper from '@/utils/financeHelper'
+import { getAggregateGpuMetrics, getGpuDisplayName, hasHardwareGpuInfo } from '@/utils/gpuHelper'
 import { formatBytesPerSecondWithConfig, formatBytesWithConfig, formatUptimeWithFormat } from '@/utils/helper'
 import { lookupIpGeo } from '@/utils/ipGeoHelper'
 import { getOSImage, getOSName } from '@/utils/osImageHelper'
@@ -55,12 +56,15 @@ interface CpuScore {
   label: string
 }
 
+const CPU_TRADEMARK_REGEX = /\((?:r|tm)\)/g
+const MULTI_SPACE_REGEX = /\s+/g
+
 // 基于 CPU 型号关键字静态估算 PassMark 分数区间
 function estimateCpuScore(cpuName: string): CpuScore {
   if (!cpuName || cpuName === '-')
     return { score: 0, tier: 'D', tierColor: 'text-gray-400', label: '未知' }
 
-  const name = cpuName.toLowerCase()
+  const name = cpuName.toLowerCase().replace(CPU_TRADEMARK_REGEX, '').replace(MULTI_SPACE_REGEX, ' ').trim()
 
   // AMD EPYC 系列
   if (name.includes('epyc 9') || name.includes('epyc 75') || name.includes('epyc 74'))
@@ -101,6 +105,8 @@ function estimateCpuScore(cpuName: string): CpuScore {
     return { score: 60, tier: 'B', tierColor: 'text-green-500', label: '中端消费级' }
   if (name.includes('core i3'))
     return { score: 42, tier: 'C', tierColor: 'text-orange-500', label: '入门消费级' }
+  if (name.includes('celeron') || name.includes('pentium') || name.includes('atom') || name.includes('intel n100'))
+    return { score: 38, tier: 'C', tierColor: 'text-orange-500', label: '入门低功耗' }
 
   // ARM / Ampere
   if (name.includes('ampere') || name.includes('altra'))
@@ -377,9 +383,12 @@ const hardwareSmallItems = computed<InfoItem[]>(() => {
 
   items.push({ label: '虚拟化', value: node?.virtualization ?? '-', icon: 'icon-park-outline:server' })
 
-  const gpu = node?.gpu_name?.trim()
-  if (gpu && gpu.toLowerCase() !== 'none')
-    items.push({ label: 'GPU', value: gpu, icon: 'icon-park-outline:video-one' })
+  if (hasHardwareGpuInfo(node)) {
+    const gpuName = getGpuDisplayName(node)
+    const { memoryTotal } = getAggregateGpuMetrics(node)
+    const gpuLabel = memoryTotal > 0 ? `${gpuName} (${formatBytes(memoryTotal)})` : gpuName
+    items.push({ label: 'GPU', value: gpuLabel, icon: 'icon-park-outline:video-one' })
+  }
 
   return items
 })

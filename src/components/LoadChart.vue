@@ -8,11 +8,13 @@ import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import VChart from 'vue-echarts'
 import { CardX } from '@/components/ui/card-x'
 import { Empty } from '@/components/ui/empty'
+import { ProgressThin } from '@/components/ui/progress-thin'
 import { Spinner } from '@/components/ui/spinner'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/stores/app'
 import { useNodesStore } from '@/stores/nodes'
-import { formatBytes, formatBytesSplit } from '@/utils/helper'
+import { getAggregateGpuMetrics, getGpuDisplayName, hasLiveGpuTelemetry } from '@/utils/gpuHelper'
+import { formatBytes, formatBytesSplit, getStatus } from '@/utils/helper'
 import { fillMissingTimePoints } from '@/utils/recordHelper'
 import { getSharedRpc } from '@/utils/rpc'
 import '@/utils/echarts' // 共享 ECharts 配置
@@ -289,6 +291,24 @@ const latestStatus = computed(() => {
   return data.at(-1) ?? null
 })
 
+// GPU 实时与历史状态
+const hasGpuChart = computed(() => hasLiveGpuTelemetry(nodeInfo.value, chartData.value))
+const gpuDisplayName = computed(() => getGpuDisplayName(nodeInfo.value))
+const gpuMetrics = computed(() => getAggregateGpuMetrics(nodeInfo.value))
+const latestGpuUsage = computed(() => {
+  if (gpuMetrics.value.gpus.length > 0)
+    return gpuMetrics.value.utilization
+  if (latestStatus.value?.gpu != null)
+    return latestStatus.value.gpu
+  return nodeInfo.value?.gpu ?? null
+})
+const gpuVramPercent = computed(() => {
+  const { memoryUsed, memoryTotal } = gpuMetrics.value
+  if (!memoryTotal)
+    return 0
+  return Math.min(100, Math.max(0, (memoryUsed / memoryTotal) * 100))
+})
+
 // ==================== 工具函数 ====================
 
 function formatTime(time: string, showDate: boolean): string {
@@ -344,6 +364,68 @@ const baseYAxisConfig = computed(() => ({
 }))
 
 // ==================== 图表配置 ====================
+
+// GPU 图表
+const gpuChartOption = computed(() => ({
+  animation: false,
+  color: [chartColors.tertiary],
+  tooltip: {
+    ...baseTooltipConfig.value,
+    formatter: (params: unknown) => {
+      const p = params as Array<{ dataIndex: number, value: number | null, color: string }>
+      if (!p.length)
+        return ''
+      const firstParam = p[0]
+      if (!firstParam)
+        return ''
+      const record = chartData.value[firstParam.dataIndex]
+      if (!record)
+        return ''
+
+      const timeStr = formatTimeForTooltip(record.time, selectedHours.value || 1)
+      const colorDot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${firstParam.color};margin-right:8px;flex-shrink:0"></span>`
+      const displayValue = firstParam.value != null ? `${firstParam.value.toFixed(1)}%` : '-'
+
+      let html = `<div style="font-weight:600;margin-bottom:6px;color:${chartThemeColors.value.textSecondary}">${timeStr}</div>`
+      html += '<div style="display:flex;flex-direction:column;gap:4px">'
+      html += `<div style="display:flex;align-items:center">${colorDot}<span>GPU 占用</span><span style="margin-left:auto;font-weight:600;padding-left:16px">${displayValue}</span></div>`
+      html += '</div>'
+      return html
+    },
+  },
+  grid: chartMargin,
+  xAxis: baseXAxisConfig.value,
+  yAxis: {
+    ...baseYAxisConfig.value,
+    name: 'GPU %',
+    nameTextStyle: { color: chartThemeColors.value.textSecondary, padding: [0, 40, 0, 0] },
+    min: 0,
+    max: 100,
+    axisLabel: { ...baseYAxisConfig.value.axisLabel, formatter: '{value}%' },
+  },
+  series: [
+    {
+      name: 'GPU',
+      type: 'line',
+      data: chartData.value.map(r => r.gpu),
+      showSymbol: false,
+      lineStyle: { width: 1.5, color: chartColors.tertiary, cap: 'round' as const },
+      areaStyle: {
+        color: {
+          type: 'linear',
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [
+            { offset: 0, color: 'rgba(78, 205, 196, 0.25)' },
+            { offset: 1, color: 'rgba(78, 205, 196, 0.02)' },
+          ],
+        },
+      },
+    },
+  ],
+}))
 
 // CPU 图表
 const cpuChartOption = computed(() => ({
@@ -854,6 +936,82 @@ onMounted(() => {
 
       <!-- 图表网格 -->
       <div v-else class="gap-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
+        <!-- GPU 详情与曲线卡片（仅具备真实 GPU 采集数据的节点展示，跨全宽与下方 6 张卡对齐） -->
+        <CardX
+          v-if="hasGpuChart"
+          size="small"
+          class="bg-background/50 border-none hover:bg-background transition-all rounded-md md:col-span-2 xl:col-span-3"
+        >
+          <template #header>
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex min-w-0 items-center gap-2">
+                <span class="text-base font-bold shrink-0">GPU</span>
+                <span v-if="gpuDisplayName" class="truncate text-xs text-muted-foreground">{{ gpuDisplayName }}</span>
+              </div>
+              <div class="text-xs flex flex-wrap items-baseline gap-2.5 tabular-nums">
+                <span v-if="latestGpuUsage != null" class="font-medium">
+                  占用 {{ latestGpuUsage.toFixed(1) }}%
+                </span>
+                <span v-if="gpuMetrics.memoryTotal > 0" class="text-muted-foreground">
+                  显存 {{ formatBytes(gpuMetrics.memoryUsed) }} / {{ formatBytes(gpuMetrics.memoryTotal) }} ({{ gpuVramPercent.toFixed(1) }}%)
+                </span>
+                <span v-if="gpuMetrics.temperature != null" class="text-muted-foreground">
+                  温度 {{ Math.round(gpuMetrics.temperature) }}°C
+                </span>
+              </div>
+            </div>
+          </template>
+          <div class="flex flex-col gap-3">
+            <!-- 单卡/多卡实时显存与温度摘要条 -->
+            <div
+              v-if="gpuMetrics.gpus.length > 0"
+              class="grid gap-2"
+              :class="gpuMetrics.gpus.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'"
+            >
+              <div
+                v-for="(gpu, idx) in gpuMetrics.gpus"
+                :key="`${gpu.name}-${idx}`"
+                class="flex flex-col gap-1.5 rounded-sm bg-slate-500/5 px-2.5 py-2"
+              >
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span class="flex min-w-0 items-center gap-1.5 font-medium">
+                    <Icon icon="icon-park-outline:video-one" :width="14" :height="14" class="shrink-0 text-muted-foreground" />
+                    <span class="truncate">{{ gpuMetrics.gpus.length > 1 ? `#${idx} ` : '' }}{{ gpu.name }}</span>
+                  </span>
+                  <div class="flex shrink-0 items-center gap-3 text-[11px] tabular-nums text-muted-foreground">
+                    <span>核心 <strong class="text-foreground">{{ gpu.utilization.toFixed(1) }}%</strong></span>
+                    <span v-if="gpu.memory_total > 0">
+                      显存 <strong class="text-foreground">{{ formatBytes(gpu.memory_used) }}</strong> / {{ formatBytes(gpu.memory_total) }}
+                    </span>
+                    <span v-if="gpu.temperature > 0">
+                      <strong class="text-foreground">{{ Math.round(gpu.temperature) }}°C</strong>
+                    </span>
+                  </div>
+                </div>
+                <div v-if="gpu.memory_total > 0" class="grid grid-cols-2 gap-3">
+                  <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[10px] text-muted-foreground">
+                      <span>核心占用</span>
+                      <span class="tabular-nums">{{ gpu.utilization.toFixed(1) }}%</span>
+                    </div>
+                    <ProgressThin :percentage="Math.min(100, Math.max(0, gpu.utilization))" :status="getStatus(gpu.utilization)" :height="4" />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[10px] text-muted-foreground">
+                      <span>显存占用</span>
+                      <span class="tabular-nums">{{ ((gpu.memory_used / gpu.memory_total) * 100).toFixed(1) }}%</span>
+                    </div>
+                    <ProgressThin :percentage="Math.min(100, Math.max(0, (gpu.memory_used / gpu.memory_total) * 100))" :status="getStatus((gpu.memory_used / gpu.memory_total) * 100)" :height="4" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="h-48">
+              <VChart :option="gpuChartOption" autoresize />
+            </div>
+          </div>
+        </CardX>
+
         <!-- CPU 卡片 -->
         <CardX size="small" class="bg-background/50 border-none hover:bg-background transition-all rounded-md">
           <template #header>
