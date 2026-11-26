@@ -1,0 +1,22 @@
+[Unit]
+Description=Komari Mainland China Reachability Probe
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+EnvironmentFile=/etc/komari-mainland-probe.env
+ExecStart=/usr/bin/python3 /opt/komari-mainland-probe/probe.py
+Restart=always
+RestartSec=5s
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+MemoryMax=64M
+
+[Install]
+WantedBy=multi-user.target

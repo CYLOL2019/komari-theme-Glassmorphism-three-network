@@ -8,7 +8,35 @@ Komari's built-in three-network Ping tasks run **from the overseas VPS toward Ch
 
 Running this tiny probe on a Mainland China host checks **both TCP (e.g. `:443`) and ICMP** directly from Mainland China toward your target servers and exposes a clean JSON feed with no private IPs or secrets in the theme code.
 
-## Usage (Docker)
+## Usage (Direct / systemd — Recommended)
+
+`probe.py` uses only the Python 3 standard library (~12–18 MB RSS, zero container overhead). Direct deployment with `systemd` is the default recommended method on Linux hosts:
+
+```bash
+sudo install -d -m 755 /opt/komari-mainland-probe
+sudo install -m 755 probe.py /opt/komari-mainland-probe/probe.py
+sudo install -m 640 mainland-probe.env.example /etc/komari-mainland-probe.env
+# Edit /etc/komari-mainland-probe.env with your physical NIC and target nodes
+sudo install -m 644 komari-mainland-probe.service /etc/systemd/system/komari-mainland-probe.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now komari-mainland-probe
+```
+
+Quick foreground test (requires `CAP_NET_RAW` only when `--interface` is set):
+
+```bash
+PROBE_LISTEN="127.0.0.1:25775" \
+PROBE_TARGETS='[{"name":"US-Node-1","ip":"203.0.113.10","port":443}]' \
+python3 probe.py
+```
+
+### Bypassing a local TUN proxy (Clash / mihomo / sing-box)
+
+Set `PROBE_INTERFACE` to the host's physical NIC (for example `enp4s0` or `eth0`). The provided `komari-mainland-probe.service` grants `AmbientCapabilities=CAP_NET_RAW` (or `--network host --cap-add NET_RAW` in Docker) so sockets bind directly via `SO_BINDTODEVICE` and `ping -I <nic>`, probing real Mainland China direct routing without touching the host's TUN rules.
+
+## Usage (Docker — Optional)
+
+If you already manage your Komari stack with Docker Compose and prefer containerized isolation:
 
 ```bash
 docker run -d \
@@ -27,10 +55,6 @@ docker run -d \
   -v /path/to/probe.py:/app/probe.py:ro \
   python:3.12-alpine python3 /app/probe.py
 ```
-
-### Bypassing a local TUN proxy (Clash / mihomo / sing-box)
-
-Set `PROBE_INTERFACE` to the host's physical NIC (for example `enp4s0` or `eth0`). On Linux with `--network host --cap-add NET_RAW`, sockets bind directly via `SO_BINDTODEVICE` and `ping -I <nic>`, probing real Mainland China direct routing without touching the host's TUN rules.
 
 ## Connecting to Komari Theme
 
